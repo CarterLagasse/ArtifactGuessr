@@ -1,4 +1,4 @@
-/* app.js — Provenance frontend.
+/* app.js — ArtifactGuessr frontend.
    Screens: home → ten rounds (guess, reveal) → results. Daily games persist in
    localStorage so a reload resumes the same round. All scoring happens server-side. */
 "use strict";
@@ -14,19 +14,14 @@ const fmt = (n) => Math.round(n).toLocaleString("en-US");
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 const TL_MIN = -3000, TL_MAX = 2025, BLOCK = 250, SNAP = 125, BLOCK_START_MAX = 1750;
-const HINTS = 3, ROUNDS = 10;
-const HINT_KINDS = [
-  { kind: "time", label: "Time", gives: "Narrows the date to a 1,000-year span" },
-  { kind: "place", label: "Place", gives: "Names the world region it comes from" },
-];
+const ROUNDS = 10;
 
 const game = {
-  kind: null,        // "daily" | "practice"
+  kind: null,        // "daily" | "practice" (the unlimited mode)
   day: null,
   rounds: [],
   index: 0,
   results: [],       // api responses, one per finished round
-  hints: {},         // { roundIndex: { time: "text", place: "text" } }
 };
 const turn = { pin: null, block: null, photo: 0, revealing: false };
 
@@ -39,8 +34,8 @@ const store = {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage full or disabled */ }
   },
 };
-const dayKey = (day) => `provenance:game:${day}`;
-const HISTORY_KEY = "provenance:history";
+const dayKey = (day) => `artifactguessr:game:${day}`;
+const HISTORY_KEY = "artifactguessr:history";
 
 function localDay() {
   const d = new Date();
@@ -78,17 +73,12 @@ function show(id) {
 }
 
 function renderHome() {
-  const day = localDay();
-  const saved = store.get(dayKey(day), null);
+  const saved = store.get(dayKey(localDay()), null);
   const finished = saved && saved.results.length >= ROUNDS;
   const inProgress = saved && !finished && saved.results.length > 0;
-  $("home-date").textContent = prettyDay(day);
-  $("home-copy").textContent = finished
-    ? "You've finished today's objects. New ones arrive tomorrow."
-    : inProgress
-      ? `Your game is in progress. Round ${saved.results.length + 1} of ${ROUNDS}. Pick up right where you left off.`
-      : "Ten new objects every day, from across human history. Place each one on the map and the timeline.";
-  $("btn-play").textContent = finished ? "See your results" : inProgress ? "Resume game" : "Play today's game";
+  $("btn-daily").textContent = finished ? "See today's daily results"
+    : inProgress ? `Resume today's daily game (round ${saved.results.length + 1} of ${ROUNDS})`
+    : "Or play today's daily game";
   show("home");
 }
 
@@ -99,7 +89,7 @@ async function startDaily() {
     Object.assign(game, saved);
   } else {
     const data = await api(`/api/daily?date=${day}`);
-    Object.assign(game, { kind: "daily", day: data.day, rounds: data.rounds, index: 0, results: [], hints: {} });
+    Object.assign(game, { kind: "daily", day: data.day, rounds: data.rounds, index: 0, results: [] });
     saveGame();
   }
   if (game.results.length >= ROUNDS) return renderResults();
@@ -108,7 +98,7 @@ async function startDaily() {
 
 async function startPractice() {
   const data = await api("/api/practice");
-  Object.assign(game, { kind: "practice", day: null, rounds: data.rounds, index: 0, results: [], hints: {} });
+  Object.assign(game, { kind: "practice", day: null, rounds: data.rounds, index: 0, results: [] });
   beginRound();
 }
 
@@ -119,11 +109,9 @@ function beginRound() {
   view.reset();
   $("reveal").hidden = true;
   $("reveal").replaceChildren();
-  $("hints").hidden = false;
   show("game");
   renderStats();
   renderPhoto();
-  renderHints();
   renderAction();
   drawMap();
   drawTimeline();
@@ -184,7 +172,7 @@ async function onAction() {
 function recordHistory() {
   const total = game.results.reduce((sum, r) => sum + r.total, 0);
   const history = store.get(HISTORY_KEY, []);
-  const label = game.kind === "daily" ? game.day : "practice";
+  const label = game.kind === "daily" ? game.day : "unlimited";
   if (game.kind !== "daily" || !history.some((h) => h.label === label)) {
     history.push({ label, total, at: Date.now() });
     store.set(HISTORY_KEY, history.slice(-200));
@@ -223,7 +211,6 @@ function renderReveal(res) {
     box.append(a);
   }
   box.hidden = false;
-  $("hints").hidden = true;
 }
 
 /* ---------- photos ---------- */
@@ -291,56 +278,6 @@ function closeLightbox() {
   lb.drag = lb.pinch = null;
   $("lightbox").classList.remove("dragging");
   $("lightbox").hidden = true;
-}
-
-/* ---------- hints ---------- */
-function hintsUsed() {
-  return Object.values(game.hints).reduce((sum, h) => sum + Object.keys(h).length, 0);
-}
-function renderHints() {
-  const left = HINTS - hintsUsed();
-  const noun = game.kind === "daily" ? "today" : "this game";
-  $("hints-left").textContent = `${left} of ${HINTS} left ${noun}`;
-  const shown = $("hints-shown");
-  shown.replaceChildren();
-  const here = game.hints[game.index] ?? {};
-  for (const h of HINT_KINDS) {
-    if (here[h.kind]) shown.append(el("dt", "eyebrow", h.label), el("dd", "", here[h.kind]));
-  }
-}
-function renderHintModal() {
-  const left = HINTS - hintsUsed();
-  const copy = $("hint-copy");
-  copy.replaceChildren(`You have ${HINTS} hints to spend across all ten rounds, and they never cost you points. You have `,
-    el("strong", "", String(left)), " left.");
-  const opts = $("hint-options");
-  opts.replaceChildren();
-  const here = game.hints[game.index] ?? {};
-  for (const h of HINT_KINDS) {
-    const row = el("div", "hint-option");
-    const text = el("div");
-    text.append(el("b", "", h.label), el("div", "", here[h.kind] ?? h.gives));
-    row.append(text);
-    if (!here[h.kind]) {
-      const b = el("button", "btn-outline", "Reveal");
-      b.disabled = left <= 0;
-      b.addEventListener("click", () => revealHint(h.kind));
-      row.append(b);
-    }
-    opts.append(row);
-  }
-}
-async function revealHint(kind) {
-  if (hintsUsed() >= HINTS) return;
-  try {
-    const res = await api("/api/hint", { round_id: game.rounds[game.index].round_id, kind });
-    (game.hints[game.index] ??= {})[kind] = res.text;
-    saveGame();
-    renderHints();
-    renderHintModal();
-  } catch {
-    toast("Couldn't load that hint");
-  }
 }
 
 /* ---------- map ---------- */
@@ -696,7 +633,7 @@ function squareColor(total) { return total >= 9000 ? "#4c8dff" : total >= 6000 ?
 
 function renderResults() {
   const total = game.results.reduce((sum, r) => sum + r.total, 0);
-  $("res-date").textContent = game.kind === "daily" ? prettyDay(game.day) : "Practice game";
+  $("res-date").textContent = game.kind === "daily" ? prettyDay(game.day) : "Unlimited";
   $("res-total").textContent = fmt(total);
   const squares = $("res-squares");
   squares.replaceChildren(...game.results.map((r) => {
@@ -765,7 +702,7 @@ function renderTable() {
 
 async function share() {
   const total = game.results.reduce((sum, r) => sum + r.total, 0);
-  const title = game.kind === "daily" ? `Provenance · ${prettyDay(game.day)}` : "Provenance";
+  const title = game.kind === "daily" ? `ArtifactGuessr · ${prettyDay(game.day)}` : "ArtifactGuessr";
   const text = [title, game.results.map((r) => shareSquare(r.total)).join(""), fmt(total)].join("\n");
   try {
     await navigator.clipboard.writeText(text);
@@ -778,7 +715,7 @@ async function share() {
 /* ---------- theme ---------- */
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  store.set("provenance:theme", theme);
+  store.set("artifactguessr:theme", theme);
   drawMap();
   drawTimeline();
 }
@@ -788,16 +725,13 @@ document.querySelectorAll("[data-theme-toggle]").forEach((b) => b.addEventListen
 
 /* ---------- wiring ---------- */
 const reportFailure = (fn) => () => fn().catch(() => toast("Couldn't reach the game server"));
-$("btn-play").addEventListener("click", reportFailure(startDaily));
-$("btn-practice").addEventListener("click", reportFailure(startPractice));
+$("btn-play").addEventListener("click", reportFailure(startPractice));
+$("btn-daily").addEventListener("click", reportFailure(startDaily));
 $("btn-again").addEventListener("click", reportFailure(startPractice));
 $("btn-action").addEventListener("click", onAction);
 $("btn-share").addEventListener("click", share);
 $("btn-home").addEventListener("click", renderHome);
 $("btn-home2").addEventListener("click", renderHome);
-$("btn-hint").addEventListener("click", () => { renderHintModal(); $("hint-modal").hidden = false; });
-$("hint-close").addEventListener("click", () => { $("hint-modal").hidden = true; });
-$("hint-modal").addEventListener("click", (e) => { if (e.target === $("hint-modal")) $("hint-modal").hidden = true; });
 
 $("ph-prev").addEventListener("click", () => stepPhoto(-1));
 $("ph-next").addEventListener("click", () => stepPhoto(1));
@@ -853,7 +787,7 @@ function endLightboxPointer(e) {
 lbBox.addEventListener("pointerup", endLightboxPointer);
 lbBox.addEventListener("pointercancel", endLightboxPointer);
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { closeLightbox(); $("hint-modal").hidden = true; }
+  if (e.key === "Escape") closeLightbox();
   if ($("lightbox").hidden) return;
   if (e.key === "ArrowLeft") stepPhoto(-1);
   if (e.key === "ArrowRight") stepPhoto(1);
@@ -861,7 +795,7 @@ window.addEventListener("keydown", (e) => {
 
 /* ---------- boot ---------- */
 (async () => {
-  document.documentElement.dataset.theme = store.get("provenance:theme", "dark");
+  document.documentElement.dataset.theme = store.get("artifactguessr:theme", "dark");
   renderHome();
   const world = await (await fetch("/static/countries.json")).json();
   const polys = [];

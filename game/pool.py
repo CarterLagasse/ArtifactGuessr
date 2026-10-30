@@ -1,4 +1,4 @@
-"""pool.py — build the Provenance object pool.
+"""pool.py — build the ArtifactGuessr object pool.
 
 Usage:
     python -m game.pool                  select from the CSV, fetch new objects, write the pool
@@ -33,7 +33,7 @@ JSONL = DATA / "game_objects.jsonl"
 OUT = DATA / "game_pool.parquet"
 
 API = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{oid}"
-HEADERS = {"User-Agent": "provenance-practice (local game builder)"}
+HEADERS = {"User-Agent": "artifactguessr (local game builder)"}
 
 MAX_SPAN_YEARS = 1000       # wider ranges make the time guess meaningless
 MIN_BEGIN = scoring.TIMELINE_MIN
@@ -59,14 +59,11 @@ DEFAULT_PER_BUCKET = 900
 
 # ---------------------------------------------------------------- CSV pass
 
-def _text(value) -> str:
-    return "" if pd.isna(value) else str(value)
-
-
 def load_candidates() -> pd.DataFrame:
     cols = [
         "Object ID", "Is Highlight", "Is Public Domain", "Title", "Culture", "Classification",
         "Object Begin Date", "Object End Date", "Department", "Country", "Region",
+        "Subregion", "City", "County", "State",
     ]
     df = pd.read_csv(CSV, low_memory=False, encoding="utf-8-sig", usecols=cols)
     print(f"CSV objects: {len(df):,}")
@@ -86,18 +83,13 @@ def load_candidates() -> pd.DataFrame:
     print(f"recognisable kinds of object: {len(df):,}")
 
     # Distinct strings are few, so resolve each combination once.
-    keys = df[["Culture", "Country", "Region"]].fillna("").drop_duplicates()
-    places = {
-        (cu, co, re_): geolite.resolve_object(cu, co, re_)
-        for cu, co, re_ in keys.itertuples(index=False, name=None)
-    }
-    resolved = [
-        places[(_text(cu), _text(co), _text(re_))]
-        for cu, co, re_ in df[["Culture", "Country", "Region"]].itertuples(index=False, name=None)
-    ]
+    geo = ["Culture", "Country", "Region", "Subregion", "City", "County", "State"]
+    combos = list(df[geo].fillna("").itertuples(index=False, name=None))
+    places = {c: geolite.resolve_object(*c) for c in set(combos)}
+    resolved = [places[c] for c in combos]
     df["place"] = resolved
     df = df[df["place"].notna()].copy()
-    for field in ("key", "label", "hint", "bucket", "lat", "lon", "tier"):
+    for field in ("key", "label", "bucket", "lat", "lon", "tier"):
         df[f"place_{field}"] = [getattr(p, field) for p in df["place"]]
     print(f"resolved to a region: {len(df):,}")
     return df.drop(columns=["place"])
@@ -219,7 +211,7 @@ def build(per_bucket: int, fetch: bool) -> pd.DataFrame:
             })
     pool = pd.DataFrame(rows)
     meta = usable[["Object ID", "Object Begin Date", "Object End Date", "place_key", "place_label",
-                   "place_hint", "place_bucket", "place_lat", "place_lon", "place_tier"]]
+                   "place_bucket", "place_lat", "place_lon", "place_tier"]]
     pool = pool.merge(meta, left_on="objectID", right_on="Object ID").drop(columns=["Object ID"])
     pool = pool.rename(columns={"Object Begin Date": "begin", "Object End Date": "end"})
     pool[["begin", "end"]] = pool[["begin", "end"]].astype(int)

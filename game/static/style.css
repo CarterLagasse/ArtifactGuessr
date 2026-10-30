@@ -46,10 +46,9 @@ button{font:inherit;color:inherit;cursor:pointer}
   gap:18px;padding:32px 24px;text-align:center;position:relative;
 }
 .hero-title{
-  font:700 min(calc((100vw - 48px)/5.8),104px)/1.1 var(--head);letter-spacing:-.03em;color:var(--accent);margin:0;
+  font:700 min(calc((100vw - 48px)/8),92px)/1.1 var(--head);letter-spacing:-.03em;color:var(--accent);margin:0;
 }
-.hero-sub{font-style:italic;font-size:22px;line-height:1.4;margin:0 0 22px;max-width:640px}
-.hero-copy{max-width:560px;margin:0 0 18px;font-size:17px}
+.hero-sub{font-size:21px;line-height:1.4;margin:0 0 22px;max-width:640px}
 .fine{font-size:12px;color:var(--muted);margin-top:30px}
 
 /* game shell */
@@ -60,7 +59,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 .wordmark{background:none;border:0;padding:0;font:700 22px var(--head);letter-spacing:-.02em;color:var(--accent)}
 .topstats{display:flex;align-items:center;gap:22px}
-.stat{font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;margin-left:4px}
+.stat{white-space:nowrap;font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;margin-left:4px}
 
 /* timeline */
 .timeline-row{
@@ -69,7 +68,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 .timeline-title{font:500 15px/1.15 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent);flex-shrink:0}
 .timeline-readout{
-  width:138px;flex-shrink:0;font-size:14px;line-height:1.25;color:var(--ink);
+  width:172px;flex-shrink:0;text-align:right;font-size:14px;line-height:1.25;color:var(--ink);
   font-variant-numeric:tabular-nums;
 }
 .timeline-readout em{color:var(--tick);font-size:12.5px}
@@ -104,14 +103,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 }
 .medium{padding:7px 12px;border-top:1px solid var(--hairline);color:var(--ink);font-size:14.5px;line-height:1.35}
 .credit{font-size:11.5px;color:var(--muted);padding:4px 12px;border-top:1px solid var(--hairline)}
-.hints{padding:8px 12px;border-top:1px solid var(--hairline)}
-.hints-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.hints-left{font-size:14px;color:var(--muted)}
-.hints dl{margin:6px 0 0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px}
-.hints dl:empty{display:none}
-.hints dt{align-self:center}
-.hints dd{margin:0;color:var(--ink);font-size:15px}
-
 /* reveal */
 .reveal{border-top:1px solid var(--hairline);padding:10px 12px}
 .reveal-culture{font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
@@ -154,16 +145,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 #res-table a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline)}
 #res-table img{width:44px;height:44px;object-fit:contain;display:block;background:var(--sea)}
 
-/* modal, lightbox, toast */
-.modal{position:fixed;inset:0;background:var(--overlay);display:flex;align-items:center;justify-content:center;z-index:30;padding:16px}
-.modal-card{position:relative;background:var(--bg);border:1px solid var(--hairline);border-radius:6px;padding:22px 24px;max-width:430px;width:100%}
-.modal-x{position:absolute;top:8px;right:12px;background:none;border:0;font-size:22px;color:var(--muted);line-height:1}
-.modal-title{font:500 13px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
-.modal-card p{margin:10px 0 12px;font-size:15px}
-.modal-card strong{color:var(--accent)}
-.hint-option{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hairline)}
-.hint-option b{color:var(--ink);font-weight:600}
-.hint-option div div{font-size:14px;color:var(--muted)}
+/* lightbox, toast */
 #lightbox{position:fixed;inset:0;background:#05090e;z-index:40;overflow:hidden;touch-action:none;cursor:zoom-out}
 #lightbox.zoomed{cursor:grab}
 #lightbox.dragging{cursor:grabbing}
@@ -186,10 +168,13 @@ button{font:inherit;color:inherit;cursor:pointer}
   .timeline-title{font-size:12px}
   .timeline-readout{width:auto;flex:1;text-align:right}
   .timeline-readout br{display:none}
-  .timeline-box{flex-basis:100%}
+  .timeline-box{flex-basis:100%;order:3}
   .actionbar{position:sticky;bottom:0;background:var(--bg);z-index:5}
   .actionbar .btn-primary{width:100%;min-width:0}
   .topbar{padding:6px 10px}
+  .wordmark{font-size:19px}
+  .topstats{gap:12px}
+  .topstats .eyebrow{display:none}
   .res-total{font-size:48px}
   #res-table .wide{display:none}
 }

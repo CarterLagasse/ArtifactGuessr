@@ -22,7 +22,6 @@ TIMELINE_MAX = 2025
 BLOCK_START_MAX = 1750
 
 ROUNDS_PER_GAME = 10
-HINTS_PER_GAME = 3
 
 
 def normalize_block(block_start: float) -> int:
@@ -58,5 +57,4 @@ def constants() -> dict:
         "timeline_max": TIMELINE_MAX,
         "block_start_max": BLOCK_START_MAX,
         "rounds_per_game": ROUNDS_PER_GAME,
-        "hints_per_game": HINTS_PER_GAME,
     }

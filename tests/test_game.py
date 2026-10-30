@@ -1,4 +1,4 @@
-"""Rules, geography and leak guards for Provenance. Run: python -m pytest tests"""
+"""Rules, geography and leak guards for ArtifactGuessr. Run: python -m pytest tests"""
 import json
 from datetime import date, timedelta
 
@@ -40,7 +40,7 @@ def test_block_stays_on_grid_and_timeline(year, block):
 
 @pytest.mark.parametrize("culture,country,region,label", [
     ("Greek, Attic", "", "", "Attica, Greece"),
-    ("French, Paris", "", "", "France"),
+    ("French, Paris", "", "", "Paris, France"),
     ("possibly French", "", "", "France"),
     ("Italian", "France", "", "France"),       # an explicit country beats a demonym
     ("Moche", "Peru", "", "North coast of Peru"),
@@ -104,6 +104,40 @@ def test_wraps_longitude():
     assert geolite.distance_to_region_km(48.85, 362.35, "c:France") == 0
 
 
+# ---------------------------------------------------------------- sub-national regions
+
+@pytest.mark.parametrize("culture,country,label", [
+    ("Central Tibet", "", "Tibetan Plateau"),
+    ("Eastern Tibet, Derge", "", "Tibetan Plateau"),
+    ("Chinese (Tibetan)", "China", "Tibetan Plateau"),
+    ("Tibetan", "Tibet", "Tibetan Plateau"),
+    ("India (Gujarat)", "", "Gujarat, India"),
+    ("Nepal (Kathmandu Valley)", "", "Kathmandu Valley, Nepal"),
+    ("Peru; north coast (?)", "", "North coast of Peru"),
+    ("German, Augsburg", "", "Augsburg, Germany"),
+    ("Italian, probably Naples", "", "Naples, Italy"),
+])
+def test_narrows_using_culture_qualifiers(culture, country, label):
+    assert geolite.resolve_object(culture, country).label == label
+
+
+def test_narrows_using_other_met_fields():
+    assert geolite.resolve_object("", "Egypt", "Upper Egypt, Thebes", "Deir el-Bahri").label == "Thebes, Egypt"
+    assert geolite.resolve_object("", "Iran", "", "", "Nishapur|Nishapur").label == "Nishapur, Iran"
+    two = geolite.resolve_object("", "Egypt", "", "Hermopolis (Ashmunein; Khemenu)|Amarna (Akhetaten)")
+    assert two.key.count("+") == 1
+
+
+@pytest.mark.parametrize("culture,country,city,label", [
+    ("", "Egypt", "Paris", "Egypt"),                   # no Paris in Egypt
+    ("French, modeled Italy, Rome", "", "", "France"), # made in France, after Rome
+    ("Chinese, for American market", "", "", "China"), # the market isn't where it was made
+    ("Japan", "", "", "Japan"),                        # nothing finer to go on
+])
+def test_does_not_over_narrow(culture, country, city, label):
+    assert geolite.resolve_object(culture, country, "", "", city).label == label
+
+
 # ---------------------------------------------------------------- game API
 
 needs_pool = pytest.mark.skipif(not server.POOL_PATH.exists(), reason="pool not built")
@@ -155,18 +189,3 @@ def test_guess_scores_and_reveals():
     assert res["year_gap"] == 0 and res["time_score"] == 5000
     assert res["total"] == res["place_score"] + res["time_score"]
     assert res["truth"]["region"]["type"] == "MultiPolygon"
-
-
-@needs_pool
-def test_hints():
-    rid = server.api_daily("2026-10-30")["rounds"][0]["round_id"]
-    row = server._row(rid)
-    assert server.api_hint(server.HintRequest(round_id=rid, kind="place"))["text"] == row["place_hint"]
-    assert "–" in server.api_hint(server.HintRequest(round_id=rid, kind="time"))["text"]
-
-
-def test_thousand_year_span():
-    assert server._thousand_year_span(1500, 1600) == "1,000 – 2,000 CE"
-    assert server._thousand_year_span(100, 200) == "1 – 1,000 CE"
-    assert server._thousand_year_span(-1500, -1400) == "2,000 – 1,000 BCE"
-    assert server._thousand_year_span(-500, -400) == "1,000 – 1 BCE"

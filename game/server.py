@@ -1,4 +1,4 @@
-"""server.py — Provenance (local practice game).
+"""server.py — ArtifactGuessr.
 
 Run:  python -m game.server    → http://localhost:8321
 
@@ -39,7 +39,7 @@ BUCKET_WEIGHTS = {
     "Sub-Saharan Africa": 0.07, "Oceania": 0.03,
 }
 
-app = FastAPI(title="Provenance", version="0.2")
+app = FastAPI(title="ArtifactGuessr", version="0.2")
 
 _pool: pd.DataFrame | None = None
 _rid_to_index: dict[str, int] = {}
@@ -95,7 +95,7 @@ def _picks_for(day: date) -> list[int]:
     p = pool()
     with _daily_lock:
         if not _daily_state:
-            rng = random.Random("provenance-daily")
+            rng = random.Random("artifactguessr-daily")
             orders = {}
             for bucket in sorted(BUCKET_WEIGHTS):
                 members = p.index[p["place_bucket"] == bucket].tolist()
@@ -145,11 +145,6 @@ class Guess(BaseModel):
     year: int   # start of the 250-year block
 
 
-class HintRequest(BaseModel):
-    round_id: str
-    kind: str   # "time" | "place"
-
-
 @app.get("/api/daily")
 def api_daily(date: str | None = None):
     day = _parse_day(date)
@@ -171,25 +166,6 @@ def api_practice():
 @app.get("/api/scoring")
 def api_scoring():
     return scoring.constants()
-
-
-def _thousand_year_span(begin: int, end: int) -> str:
-    mid = (begin + end) // 2
-    low = mid // 1000 * 1000
-    high = low + 1000
-    if low >= 0:
-        return f"{max(low, 1):,} – {high:,} CE"
-    return f"{-low:,} – {max(-high, 1):,} BCE"
-
-
-@app.post("/api/hint")
-def api_hint(h: HintRequest):
-    row = _row(h.round_id)
-    if h.kind == "time":
-        return {"kind": "time", "text": _thousand_year_span(int(row["begin"]), int(row["end"]))}
-    if h.kind == "place":
-        return {"kind": "place", "text": str(row["place_hint"])}
-    raise HTTPException(400, "kind must be time or place")
 
 
 def _fmt_year(y: int) -> str:
@@ -233,7 +209,6 @@ def api_guess(g: Guess):
             "end": end,
             "range_text": _fmt_year(begin) if begin == end else f"{_fmt_year(begin)} – {_fmt_year(end)}",
             "place_label": str(row["place_label"]),
-            "region_hint": str(row["place_hint"]),
             "lat": float(row["place_lat"]),
             "lon": float(row["place_lon"]),
             "region": {"type": "MultiPolygon", "coordinates": list(geolite.geometry(key))},
@@ -253,7 +228,7 @@ def api_image(round_id: str, index: int, full: bool = False):
     IMAGE_CACHE.mkdir(parents=True, exist_ok=True)
     cached = IMAGE_CACHE / (hashlib.sha256(url.encode()).hexdigest()[:24] + ".jpg")
     if not cached.exists():
-        req = urllib.request.Request(url, headers={"User-Agent": "provenance-practice (local game)"})
+        req = urllib.request.Request(url, headers={"User-Agent": "artifactguessr (local game)"})
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 data = r.read()

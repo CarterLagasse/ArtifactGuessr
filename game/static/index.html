@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Provenance</title>
+<title>ArtifactGuessr</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
@@ -14,19 +14,17 @@
 <!-- Home -->
 <section id="home" class="screen">
   <button class="theme-toggle" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">◐</button>
-  <h1 class="hero-title">Provenance</h1>
-  <p class="hero-sub">One object. One pin on the map. One guess at its age.</p>
-  <p class="hero-copy" id="home-copy"></p>
-  <div class="eyebrow" id="home-date"></div>
-  <button id="btn-play" class="btn-primary"></button>
-  <button id="btn-practice" class="btn-quiet">Practice with ten random objects</button>
-  <p class="fine">A local practice game. Objects: The Metropolitan Museum of Art Open Access, CC0.</p>
+  <h1 class="hero-title">ArtifactGuessr</h1>
+  <p class="hero-sub">Unlimited artifact location and time guessing from Met open data</p>
+  <button id="btn-play" class="btn-primary">Play</button>
+  <button id="btn-daily" class="btn-quiet"></button>
+  <p class="fine">Objects: The Metropolitan Museum of Art Open Access, CC0.</p>
 </section>
 
 <!-- Game -->
 <section id="game" class="screen" hidden>
   <header class="topbar">
-    <button id="btn-home" class="wordmark" title="Home">Provenance</button>
+    <button id="btn-home" class="wordmark" title="Home">ArtifactGuessr</button>
     <div class="topstats">
       <div><span class="eyebrow">Round</span> <span id="stat-round" class="stat"></span></div>
       <div><span class="eyebrow">Score</span> <span id="stat-score" class="stat"></span></div>
@@ -36,8 +34,8 @@
 
   <div class="timeline-row">
     <div class="timeline-title">When</div>
-    <div class="timeline-readout" id="tl-readout"></div>
     <div class="timeline-box"><svg id="timeline" height="68"></svg></div>
+    <div class="timeline-readout" id="tl-readout"></div>
   </div>
 
   <div class="board">
@@ -59,13 +57,6 @@
       </div>
       <div class="medium" id="medium"></div>
       <div class="credit" id="credit"></div>
-      <div class="hints" id="hints">
-        <div class="hints-head">
-          <div><div class="eyebrow">Hints</div><div class="hints-left" id="hints-left"></div></div>
-          <button id="btn-hint" class="btn-outline">Use a hint</button>
-        </div>
-        <dl id="hints-shown"></dl>
-      </div>
       <div class="reveal" id="reveal" hidden></div>
     </aside>
   </div>
@@ -78,7 +69,7 @@
 <!-- Results -->
 <section id="results" class="screen" hidden>
   <header class="topbar">
-    <button id="btn-home2" class="wordmark" title="Home">Provenance</button>
+    <button id="btn-home2" class="wordmark" title="Home">ArtifactGuessr</button>
     <button class="theme-toggle inline" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">◐</button>
   </header>
   <div class="results-body">
@@ -88,22 +79,12 @@
     <div class="squares" id="res-squares"></div>
     <div class="res-actions">
       <button id="btn-share" class="btn-primary">Share</button>
-      <button id="btn-again" class="btn-outline">Practice more</button>
+      <button id="btn-again" class="btn-outline">Play again</button>
     </div>
     <div id="res-history"></div>
     <div class="table-scroll"><table id="res-table"></table></div>
   </div>
 </section>
-
-<!-- Hint picker -->
-<div id="hint-modal" class="modal" hidden>
-  <div class="modal-card" role="dialog" aria-labelledby="hint-title">
-    <button id="hint-close" class="modal-x" aria-label="Close">×</button>
-    <div id="hint-title" class="modal-title">Hints</div>
-    <p id="hint-copy"></p>
-    <div id="hint-options"></div>
-  </div>
-</div>
 
 <div id="lightbox" hidden>
   <img id="lightbox-img" alt="" draggable="false">

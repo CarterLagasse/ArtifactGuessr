@@ -9,6 +9,9 @@ Resolution order per object (see `resolve_object`):
   1. strong culture (Moche, Greek/Attic, Yoruba ...): beats the country field
   2. Country field, then Region field
   3. weak culture (demonyms: French, Italian, Roman ...)
+  4. refine a whole-country answer using the Met's finer fields: FINE_PLACES (hand-placed
+     sites and provinces), then game/cities.json. A match only counts if it lies in
+     that country, so "Paris" in an American object can't land in France.
 Matching is exact after normalization. Substring matching is deliberately absent:
 it once mapped "French" to the French Southern and Antarctic Lands.
 Anything unresolved, or alternatives spanning two world regions, returns None.
@@ -23,6 +26,7 @@ from functools import lru_cache
 from pathlib import Path
 
 COUNTRIES_PATH = Path(__file__).parent / "static" / "countries.json"
+CITIES_PATH = Path(__file__).parent / "cities.json"
 EARTH_KM = 6371.0
 
 Polygon = list[list[list[float]]]  # rings of [lon, lat]; ring 0 is the shell
@@ -32,52 +36,30 @@ Polygon = list[list[list[float]]]  # rings of [lon, lat]; ring 0 is the shell
 class Place:
     key: str      # geometry key, e.g. "c:Egypt+c:Syria" or "o:35.2,24.8,250"
     label: str    # shown on reveal
-    hint: str     # world-region wording for the Place hint
     bucket: str   # balancing bucket for daily picks
     lat: float    # representative point
     lon: float
-    tier: str     # A culture region, B country, C inferred from a demonym
+    tier: str     # A sub-national or culture region, B country, C inferred from a demonym
 
 
 # ---------------------------------------------------------------- world regions
 
-# Natural Earth SUBREGION -> (hint wording, balancing bucket)
-SUBREGIONS: dict[str, tuple[str, str]] = {
-    "Western Europe": ("Western Europe", "Europe"),
-    "Northern Europe": ("Northern Europe", "Europe"),
-    "Southern Europe": ("Southern Europe", "Europe"),
-    "Eastern Europe": ("Eastern Europe", "Europe"),
-    "Western Asia": ("Near East", "Near East"),
-    "Northern Africa": ("North Africa", "Near East"),
-    "Central Asia": ("Central Asia", "South & Central Asia"),
-    "Southern Asia": ("South Asia", "South & Central Asia"),
-    "Eastern Asia": ("East Asia", "East Asia"),
-    "South-Eastern Asia": ("Southeast Asia", "Southeast Asia"),
-    "Western Africa": ("West Africa", "Sub-Saharan Africa"),
-    "Middle Africa": ("Central Africa", "Sub-Saharan Africa"),
-    "Eastern Africa": ("East Africa", "Sub-Saharan Africa"),
-    "Southern Africa": ("Southern Africa", "Sub-Saharan Africa"),
-    "Northern America": ("North America", "Americas"),
-    "Central America": ("Central America", "Americas"),
-    "Caribbean": ("Caribbean", "Americas"),
-    "South America": ("South America", "Americas"),
-    "Melanesia": ("Oceania", "Oceania"),
-    "Micronesia": ("Oceania", "Oceania"),
-    "Polynesia": ("Oceania", "Oceania"),
-    "Australia and New Zealand": ("Oceania", "Oceania"),
+# Natural Earth SUBREGION -> balancing bucket
+SUBREGIONS: dict[str, str] = {
+    "Western Europe": "Europe", "Northern Europe": "Europe", "Southern Europe": "Europe",
+    "Eastern Europe": "Europe", "Western Asia": "Near East", "Northern Africa": "Near East",
+    "Central Asia": "South & Central Asia", "Southern Asia": "South & Central Asia",
+    "Eastern Asia": "East Asia", "South-Eastern Asia": "Southeast Asia",
+    "Western Africa": "Sub-Saharan Africa", "Middle Africa": "Sub-Saharan Africa",
+    "Eastern Africa": "Sub-Saharan Africa", "Southern Africa": "Sub-Saharan Africa",
+    "Northern America": "Americas", "Central America": "Americas", "Caribbean": "Americas",
+    "South America": "Americas", "Melanesia": "Oceania", "Micronesia": "Oceania",
+    "Polynesia": "Oceania", "Australia and New Zealand": "Oceania",
 }
-HINT_OVERRIDES: dict[str, tuple[str, str]] = {
-    "Iran": ("Near East", "Near East"),
-    "Afghanistan": ("Central Asia", "South & Central Asia"),
-    "Mexico": ("Mesoamerica", "Americas"),
-    "Guatemala": ("Mesoamerica", "Americas"),
-    "Belize": ("Mesoamerica", "Americas"),
-    "El Salvador": ("Mesoamerica", "Americas"),
-    "Honduras": ("Mesoamerica", "Americas"),
-    "Peru": ("Andes", "Americas"),
-    "Bolivia": ("Andes", "Americas"),
-    "Ecuador": ("Andes", "Americas"),
-    "Sudan": ("Northeast Africa", "Sub-Saharan Africa"),
+BUCKET_OVERRIDES: dict[str, str] = {
+    "Iran": "Near East",
+    "Afghanistan": "South & Central Asia",
+    "Sudan": "Sub-Saharan Africa",
 }
 
 # Overseas parts are dropped, so a French object isn't "near" French Guiana.
@@ -172,136 +154,209 @@ def _circle(lat: float, lon: float, km: int) -> tuple[str, float, float, int]:
 
 
 # Cultures that say more than a modern border does.
-# key -> (label, hint, bucket, geometry). Radii are deliberately generous: the
+# key -> (label, bucket, geometry). Radii are deliberately generous: the
 # real game draws broad cultural regions, and a tiny circle punishes good guesses.
-STRONG_CULTURES: dict[str, tuple[str, str, str, tuple]] = {
+STRONG_CULTURES: dict[str, tuple[str, str, tuple]] = {
     # Aegean and Mediterranean
-    "greek, attic": ("Attica, Greece", "Southern Europe", "Europe", _countries("Greece")),
-    "greek, south italian": ("Magna Graecia, southern Italy", "Southern Europe", "Europe", _circle(39.8, 16.2, 300)),
-    "greek, south italian, apulian": ("Apulia, southern Italy", "Southern Europe", "Europe", _circle(40.8, 16.8, 200)),
-    "greek, east greek": ("Ionia, western Anatolia", "Near East", "Near East", _circle(38.3, 27.2, 250)),
-    "minoan": ("Minoan Crete", "Southern Europe", "Europe", _circle(35.2, 24.9, 200)),
-    "mycenaean": ("Mycenaean Greece", "Southern Europe", "Europe", _countries("Greece")),
-    "helladic": ("Bronze Age Greece", "Southern Europe", "Europe", _countries("Greece")),
-    "cycladic": ("Cyclades, Greece", "Southern Europe", "Europe", _circle(37.0, 25.2, 150)),
-    "cypriot": ("Cyprus", "Near East", "Near East", _countries("Cyprus", "Northern Cyprus")),
-    "roman, cypriot": ("Roman Cyprus", "Near East", "Near East", _countries("Cyprus", "Northern Cyprus")),
-    "etruscan": ("Etruria, central Italy", "Southern Europe", "Europe", _circle(42.8, 11.6, 200)),
-    "villanovan": ("Etruria, central Italy", "Southern Europe", "Europe", _circle(43.0, 11.6, 250)),
-    "phoenician": ("Phoenicia", "Near East", "Near East", _circle(33.9, 35.6, 250)),
-    "punic": ("Carthage", "North Africa", "Near East", _circle(36.8, 10.2, 300)),
-    "frankish": ("Frankish lands", "Western Europe", "Europe", _countries("France", "Germany", "Belgium")),
-    "merovingian": ("Merovingian Gaul", "Western Europe", "Europe", _countries("France", "Belgium")),
-    "visigothic": ("Visigothic Spain", "Southern Europe", "Europe", _countries("Spain")),
-    "langobardic": ("Lombard Italy", "Southern Europe", "Europe", _countries("Italy")),
-    "lombard": ("Lombard Italy", "Southern Europe", "Europe", _countries("Italy")),
-    "anglo-saxon": ("Anglo-Saxon England", "Northern Europe", "Europe", _countries("United Kingdom")),
-    "celtic": ("Celtic Europe", "Western Europe", "Europe", _countries("France", "Ireland", "United Kingdom")),
-    "avar": ("Avar Khaganate", "Eastern Europe", "Europe", _countries("Hungary", "Romania")),
-    "scythian": ("Pontic steppe", "Eastern Europe", "Europe", _circle(47.5, 34.5, 500)),
+    "greek, attic": ("Attica, Greece", "Europe", _countries("Greece")),
+    "greek, south italian": ("Magna Graecia, southern Italy", "Europe", _circle(39.8, 16.2, 300)),
+    "greek, south italian, apulian": ("Apulia, southern Italy", "Europe", _circle(40.8, 16.8, 200)),
+    "greek, east greek": ("Ionia, western Anatolia", "Near East", _circle(38.3, 27.2, 250)),
+    "minoan": ("Minoan Crete", "Europe", _circle(35.2, 24.9, 200)),
+    "mycenaean": ("Mycenaean Greece", "Europe", _countries("Greece")),
+    "helladic": ("Bronze Age Greece", "Europe", _countries("Greece")),
+    "cycladic": ("Cyclades, Greece", "Europe", _circle(37.0, 25.2, 150)),
+    "cypriot": ("Cyprus", "Near East", _countries("Cyprus", "Northern Cyprus")),
+    "roman, cypriot": ("Roman Cyprus", "Near East", _countries("Cyprus", "Northern Cyprus")),
+    "etruscan": ("Etruria, central Italy", "Europe", _circle(42.8, 11.6, 200)),
+    "villanovan": ("Etruria, central Italy", "Europe", _circle(43.0, 11.6, 250)),
+    "phoenician": ("Phoenicia", "Near East", _circle(33.9, 35.6, 250)),
+    "punic": ("Carthage", "Near East", _circle(36.8, 10.2, 300)),
+    "frankish": ("Frankish lands", "Europe", _countries("France", "Germany", "Belgium")),
+    "merovingian": ("Merovingian Gaul", "Europe", _countries("France", "Belgium")),
+    "visigothic": ("Visigothic Spain", "Europe", _countries("Spain")),
+    "langobardic": ("Lombard Italy", "Europe", _countries("Italy")),
+    "lombard": ("Lombard Italy", "Europe", _countries("Italy")),
+    "anglo-saxon": ("Anglo-Saxon England", "Europe", _countries("United Kingdom")),
+    "celtic": ("Celtic Europe", "Europe", _countries("France", "Ireland", "United Kingdom")),
+    "avar": ("Avar Khaganate", "Europe", _countries("Hungary", "Romania")),
+    "scythian": ("Pontic steppe", "Europe", _circle(47.5, 34.5, 500)),
     # Ancient Near East
-    "sumerian": ("Sumer, southern Mesopotamia", "Near East", "Near East", _circle(31.3, 45.9, 300)),
-    "babylonian": ("Babylonia, southern Mesopotamia", "Near East", "Near East", _circle(32.5, 44.4, 350)),
-    "assyrian": ("Assyria, northern Mesopotamia", "Near East", "Near East", _circle(36.3, 43.2, 350)),
-    "old assyrian trading colony": ("Cappadocia, Anatolia", "Near East", "Near East", _circle(38.8, 35.5, 300)),
-    "hittite": ("Hittite Anatolia", "Near East", "Near East", _circle(40.0, 34.6, 400)),
-    "phrygian": ("Phrygia, Anatolia", "Near East", "Near East", _circle(39.5, 31.0, 300)),
-    "lydian": ("Lydia, Anatolia", "Near East", "Near East", _circle(38.5, 28.0, 200)),
-    "urartian": ("Urartu", "Near East", "Near East", _circle(39.0, 43.3, 300)),
-    "elamite": ("Elam, southwest Iran", "Near East", "Near East", _circle(32.0, 48.5, 300)),
-    "achaemenid": ("Achaemenid Persia", "Near East", "Near East", _countries("Iran")),
-    "parthian": ("Parthian Persia", "Near East", "Near East", _countries("Iran", "Iraq")),
-    "sasanian": ("Sasanian Persia", "Near East", "Near East", _countries("Iran", "Iraq")),
-    "nabataean": ("Nabataea", "Near East", "Near East", _circle(30.3, 35.4, 250)),
-    "palmyrene": ("Palmyra", "Near East", "Near East", _circle(34.6, 38.3, 250)),
-    "israelite": ("Ancient Israel", "Near East", "Near East", _countries("Israel", "Palestine")),
-    "south arabian": ("South Arabia", "Near East", "Near East", _countries("Yemen")),
-    "bactria-margiana archaeological complex": ("Bactria-Margiana", "Central Asia", "South & Central Asia",
+    "sumerian": ("Sumer, southern Mesopotamia", "Near East", _circle(31.3, 45.9, 300)),
+    "babylonian": ("Babylonia, southern Mesopotamia", "Near East", _circle(32.5, 44.4, 350)),
+    "assyrian": ("Assyria, northern Mesopotamia", "Near East", _circle(36.3, 43.2, 350)),
+    "old assyrian trading colony": ("Cappadocia, Anatolia", "Near East", _circle(38.8, 35.5, 300)),
+    "hittite": ("Hittite Anatolia", "Near East", _circle(40.0, 34.6, 400)),
+    "phrygian": ("Phrygia, Anatolia", "Near East", _circle(39.5, 31.0, 300)),
+    "lydian": ("Lydia, Anatolia", "Near East", _circle(38.5, 28.0, 200)),
+    "urartian": ("Urartu", "Near East", _circle(39.0, 43.3, 300)),
+    "elamite": ("Elam, southwest Iran", "Near East", _circle(32.0, 48.5, 300)),
+    "achaemenid": ("Achaemenid Persia", "Near East", _countries("Iran")),
+    "parthian": ("Parthian Persia", "Near East", _countries("Iran", "Iraq")),
+    "sasanian": ("Sasanian Persia", "Near East", _countries("Iran", "Iraq")),
+    "nabataean": ("Nabataea", "Near East", _circle(30.3, 35.4, 250)),
+    "palmyrene": ("Palmyra", "Near East", _circle(34.6, 38.3, 250)),
+    "israelite": ("Ancient Israel", "Near East", _countries("Israel", "Palestine")),
+    "south arabian": ("South Arabia", "Near East", _countries("Yemen")),
+    "bactria-margiana archaeological complex": ("Bactria-Margiana", "South & Central Asia",
                                                 _countries("Turkmenistan", "Uzbekistan", "Afghanistan")),
-    "bactrian": ("Bactria", "Central Asia", "South & Central Asia", _countries("Afghanistan", "Uzbekistan", "Tajikistan")),
-    "sogdian": ("Sogdiana", "Central Asia", "South & Central Asia", _countries("Uzbekistan", "Tajikistan")),
-    "kushan": ("Kushan Empire", "South Asia", "South & Central Asia", _countries("Afghanistan", "Pakistan")),
-    "nubian": ("Nubia", "Northeast Africa", "Sub-Saharan Africa", _circle(20.0, 31.5, 500)),
-    "kushite": ("Kush, Nubia", "Northeast Africa", "Sub-Saharan Africa", _circle(19.0, 32.5, 500)),
+    "bactrian": ("Bactria", "South & Central Asia", _countries("Afghanistan", "Uzbekistan", "Tajikistan")),
+    "sogdian": ("Sogdiana", "South & Central Asia", _countries("Uzbekistan", "Tajikistan")),
+    "kushan": ("Kushan Empire", "South & Central Asia", _countries("Afghanistan", "Pakistan")),
+    "nubian": ("Nubia", "Sub-Saharan Africa", _circle(20.0, 31.5, 500)),
+    "kushite": ("Kush, Nubia", "Sub-Saharan Africa", _circle(19.0, 32.5, 500)),
     # Asia
-    "khmer": ("Khmer Empire", "Southeast Asia", "Southeast Asia", _countries("Cambodia")),
-    "cham": ("Champa, central Vietnam", "Southeast Asia", "Southeast Asia", _circle(15.0, 108.5, 350)),
-    "mongol": ("Mongolia", "East Asia", "East Asia", _countries("Mongolia")),
-    "tibetan": ("Tibetan Plateau", "East Asia", "East Asia", _circle(31.0, 89.0, 800)),
-    "tibet": ("Tibetan Plateau", "East Asia", "East Asia", _circle(31.0, 89.0, 800)),
+    "khmer": ("Khmer Empire", "Southeast Asia", _countries("Cambodia")),
+    "cham": ("Champa, central Vietnam", "Southeast Asia", _circle(15.0, 108.5, 350)),
+    "mongol": ("Mongolia", "East Asia", _countries("Mongolia")),
+    "tibetan": ("Tibetan Plateau", "East Asia", _circle(31.0, 89.0, 800)),
+    "mexica": ("Aztec Empire", "Americas", _circle(19.4, -99.1, 350)),
+    "salinar": ("North coast of Peru", "Americas", _circle(-8.2, -78.9, 350)),
+    "tibet": ("Tibetan Plateau", "East Asia", _circle(31.0, 89.0, 800)),
     # Mesoamerica and the Andes
-    "olmec": ("Olmec heartland, Mexico", "Mesoamerica", "Americas", _circle(18.0, -94.5, 300)),
-    "maya": ("Maya region", "Mesoamerica", "Americas", _circle(17.0, -89.8, 450)),
-    "aztec": ("Aztec Empire", "Mesoamerica", "Americas", _circle(19.4, -99.1, 350)),
-    "mixtec": ("Oaxaca, Mexico", "Mesoamerica", "Americas", _circle(17.1, -97.0, 250)),
-    "zapotec": ("Oaxaca, Mexico", "Mesoamerica", "Americas", _circle(17.1, -96.7, 250)),
-    "teotihuacan": ("Teotihuacan, Mexico", "Mesoamerica", "Americas", _circle(19.7, -98.8, 300)),
-    "huastec": ("Huasteca, Mexico", "Mesoamerica", "Americas", _circle(21.8, -98.5, 250)),
-    "moche": ("North coast of Peru", "Andes", "Americas", _circle(-8.2, -78.9, 350)),
-    "chimú": ("North coast of Peru", "Andes", "Americas", _circle(-8.1, -79.0, 350)),
-    "chimu": ("North coast of Peru", "Andes", "Americas", _circle(-8.1, -79.0, 350)),
-    "vicús": ("Far north of Peru", "Andes", "Americas", _circle(-5.2, -80.2, 250)),
-    "nasca": ("South coast of Peru", "Andes", "Americas", _circle(-14.8, -75.1, 300)),
-    "nazca": ("South coast of Peru", "Andes", "Americas", _circle(-14.8, -75.1, 300)),
-    "paracas": ("South coast of Peru", "Andes", "Americas", _circle(-13.9, -76.2, 300)),
-    "chancay": ("Central coast of Peru", "Andes", "Americas", _circle(-11.5, -77.2, 250)),
-    "wari": ("Wari Empire, Peru", "Andes", "Americas", _countries("Peru")),
-    "inca": ("Inca Empire", "Andes", "Americas", _countries("Peru", "Bolivia", "Ecuador")),
-    "tiwanaku": ("Lake Titicaca basin", "Andes", "Americas", _circle(-16.5, -68.7, 300)),
-    "calima": ("Colombia", "Andes", "Americas", _countries("Colombia")),
-    "quimbaya": ("Colombia", "Andes", "Americas", _countries("Colombia")),
-    "muisca": ("Colombia", "Andes", "Americas", _countries("Colombia")),
-    "tairona": ("Colombia", "Andes", "Americas", _countries("Colombia")),
-    "jama-coaque": ("Coastal Ecuador", "Andes", "Americas", _circle(-0.3, -80.0, 250)),
-    "coclé": ("Panama", "Central America", "Americas", _countries("Panama")),
-    "taíno": ("Greater Antilles", "Caribbean", "Americas", _countries("Dominican Republic", "Haiti", "Puerto Rico", "Cuba")),
+    "olmec": ("Olmec heartland, Mexico", "Americas", _circle(18.0, -94.5, 300)),
+    "maya": ("Maya region", "Americas", _circle(17.0, -89.8, 450)),
+    "aztec": ("Aztec Empire", "Americas", _circle(19.4, -99.1, 350)),
+    "mixtec": ("Oaxaca, Mexico", "Americas", _circle(17.1, -97.0, 250)),
+    "zapotec": ("Oaxaca, Mexico", "Americas", _circle(17.1, -96.7, 250)),
+    "teotihuacan": ("Teotihuacan, Mexico", "Americas", _circle(19.7, -98.8, 300)),
+    "huastec": ("Huasteca, Mexico", "Americas", _circle(21.8, -98.5, 250)),
+    "moche": ("North coast of Peru", "Americas", _circle(-8.2, -78.9, 350)),
+    "chimú": ("North coast of Peru", "Americas", _circle(-8.1, -79.0, 350)),
+    "chimu": ("North coast of Peru", "Americas", _circle(-8.1, -79.0, 350)),
+    "vicús": ("Far north of Peru", "Americas", _circle(-5.2, -80.2, 250)),
+    "nasca": ("South coast of Peru", "Americas", _circle(-14.8, -75.1, 300)),
+    "nazca": ("South coast of Peru", "Americas", _circle(-14.8, -75.1, 300)),
+    "paracas": ("South coast of Peru", "Americas", _circle(-13.9, -76.2, 300)),
+    "chancay": ("Central coast of Peru", "Americas", _circle(-11.5, -77.2, 250)),
+    "wari": ("Wari Empire, Peru", "Americas", _countries("Peru")),
+    "inca": ("Inca Empire", "Americas", _countries("Peru", "Bolivia", "Ecuador")),
+    "tiwanaku": ("Lake Titicaca basin", "Americas", _circle(-16.5, -68.7, 300)),
+    "calima": ("Colombia", "Americas", _countries("Colombia")),
+    "quimbaya": ("Colombia", "Americas", _countries("Colombia")),
+    "muisca": ("Colombia", "Americas", _countries("Colombia")),
+    "tairona": ("Colombia", "Americas", _countries("Colombia")),
+    "jama-coaque": ("Coastal Ecuador", "Americas", _circle(-0.3, -80.0, 250)),
+    "coclé": ("Panama", "Americas", _countries("Panama")),
+    "taíno": ("Greater Antilles", "Americas", _countries("Dominican Republic", "Haiti", "Puerto Rico", "Cuba")),
     # North America
-    "navajo": ("American Southwest", "North America", "Americas", _circle(36.0, -110.0, 500)),
-    "hopi": ("American Southwest", "North America", "Americas", _circle(35.8, -110.5, 500)),
-    "zuni": ("American Southwest", "North America", "Americas", _circle(35.0, -108.8, 500)),
-    "lakota": ("Northern Plains", "North America", "Americas", _circle(44.5, -102.0, 600)),
-    "haida": ("Pacific Northwest Coast", "North America", "Americas", _circle(54.0, -131.0, 600)),
-    "tlingit": ("Pacific Northwest Coast", "North America", "Americas", _circle(58.0, -135.0, 600)),
-    "anishinaabe": ("Great Lakes", "North America", "Americas", _circle(46.0, -85.0, 700)),
+    "navajo": ("American Southwest", "Americas", _circle(36.0, -110.0, 500)),
+    "hopi": ("American Southwest", "Americas", _circle(35.8, -110.5, 500)),
+    "zuni": ("American Southwest", "Americas", _circle(35.0, -108.8, 500)),
+    "lakota": ("Northern Plains", "Americas", _circle(44.5, -102.0, 600)),
+    "haida": ("Pacific Northwest Coast", "Americas", _circle(54.0, -131.0, 600)),
+    "tlingit": ("Pacific Northwest Coast", "Americas", _circle(58.0, -135.0, 600)),
+    "anishinaabe": ("Great Lakes", "Americas", _circle(46.0, -85.0, 700)),
     # Sub-Saharan Africa
-    "yoruba": ("Yorubaland", "West Africa", "Sub-Saharan Africa", _circle(7.6, 4.2, 300)),
-    "edo": ("Kingdom of Benin, Nigeria", "West Africa", "Sub-Saharan Africa", _circle(6.3, 5.6, 200)),
-    "benin": ("Kingdom of Benin, Nigeria", "West Africa", "Sub-Saharan Africa", _circle(6.3, 5.6, 200)),
-    "igbo": ("Igboland, Nigeria", "West Africa", "Sub-Saharan Africa", _circle(5.9, 7.4, 200)),
-    "akan": ("Akan lands", "West Africa", "Sub-Saharan Africa", _countries("Ghana", "Ivory Coast")),
-    "asante": ("Asante, Ghana", "West Africa", "Sub-Saharan Africa", _countries("Ghana")),
-    "bamana": ("Bamana lands, Mali", "West Africa", "Sub-Saharan Africa", _countries("Mali")),
-    "dogon": ("Dogon country, Mali", "West Africa", "Sub-Saharan Africa", _countries("Mali")),
-    "senufo": ("Senufo lands", "West Africa", "Sub-Saharan Africa", _circle(9.8, -5.5, 300)),
-    "baule": ("Côte d'Ivoire", "West Africa", "Sub-Saharan Africa", _countries("Ivory Coast")),
-    "dan": ("Dan lands", "West Africa", "Sub-Saharan Africa", _circle(7.3, -8.0, 250)),
-    "mende": ("Sierra Leone", "West Africa", "Sub-Saharan Africa", _countries("Sierra Leone", "Liberia")),
-    "sapi": ("Sierra Leone", "West Africa", "Sub-Saharan Africa", _countries("Sierra Leone", "Guinea")),
-    "fang": ("Fang lands", "Central Africa", "Sub-Saharan Africa", _countries("Gabon", "Equatorial Guinea")),
-    "punu": ("Gabon", "Central Africa", "Sub-Saharan Africa", _countries("Gabon")),
-    "kota": ("Gabon", "Central Africa", "Sub-Saharan Africa", _countries("Gabon")),
-    "kongo": ("Kingdom of Kongo", "Central Africa", "Sub-Saharan Africa", _circle(-5.8, 14.5, 450)),
-    "luba": ("Luba lands, DR Congo", "Central Africa", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
-    "songye": ("DR Congo", "Central Africa", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
-    "kuba": ("Kuba Kingdom, DR Congo", "Central Africa", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
-    "lega": ("DR Congo", "Central Africa", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
-    "mangbetu": ("DR Congo", "Central Africa", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
-    "chokwe": ("Chokwe lands", "Central Africa", "Sub-Saharan Africa", _countries("Angola")),
-    "zulu": ("KwaZulu", "Southern Africa", "Sub-Saharan Africa", _countries("South Africa")),
+    "yoruba": ("Yorubaland", "Sub-Saharan Africa", _circle(7.6, 4.2, 300)),
+    "edo": ("Kingdom of Benin, Nigeria", "Sub-Saharan Africa", _circle(6.3, 5.6, 200)),
+    "benin": ("Kingdom of Benin, Nigeria", "Sub-Saharan Africa", _circle(6.3, 5.6, 200)),
+    "igbo": ("Igboland, Nigeria", "Sub-Saharan Africa", _circle(5.9, 7.4, 200)),
+    "akan": ("Akan lands", "Sub-Saharan Africa", _countries("Ghana", "Ivory Coast")),
+    "asante": ("Asante, Ghana", "Sub-Saharan Africa", _countries("Ghana")),
+    "bamana": ("Bamana lands, Mali", "Sub-Saharan Africa", _countries("Mali")),
+    "dogon": ("Dogon country, Mali", "Sub-Saharan Africa", _countries("Mali")),
+    "senufo": ("Senufo lands", "Sub-Saharan Africa", _circle(9.8, -5.5, 300)),
+    "baule": ("Côte d'Ivoire", "Sub-Saharan Africa", _countries("Ivory Coast")),
+    "dan": ("Dan lands", "Sub-Saharan Africa", _circle(7.3, -8.0, 250)),
+    "mende": ("Sierra Leone", "Sub-Saharan Africa", _countries("Sierra Leone", "Liberia")),
+    "sapi": ("Sierra Leone", "Sub-Saharan Africa", _countries("Sierra Leone", "Guinea")),
+    "fang": ("Fang lands", "Sub-Saharan Africa", _countries("Gabon", "Equatorial Guinea")),
+    "punu": ("Gabon", "Sub-Saharan Africa", _countries("Gabon")),
+    "kota": ("Gabon", "Sub-Saharan Africa", _countries("Gabon")),
+    "kongo": ("Kingdom of Kongo", "Sub-Saharan Africa", _circle(-5.8, 14.5, 450)),
+    "luba": ("Luba lands, DR Congo", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
+    "songye": ("DR Congo", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
+    "kuba": ("Kuba Kingdom, DR Congo", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
+    "lega": ("DR Congo", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
+    "mangbetu": ("DR Congo", "Sub-Saharan Africa", _countries("Democratic Republic of the Congo")),
+    "chokwe": ("Chokwe lands", "Sub-Saharan Africa", _countries("Angola")),
+    "zulu": ("KwaZulu", "Sub-Saharan Africa", _countries("South Africa")),
     # Oceania
-    "asmat": ("Asmat, New Guinea", "Oceania", "Oceania", _circle(-5.5, 138.5, 350)),
-    "iatmul": ("Sepik River, New Guinea", "Oceania", "Oceania", _circle(-4.2, 143.3, 300)),
-    "abelam": ("Sepik River, New Guinea", "Oceania", "Oceania", _circle(-3.8, 143.0, 300)),
-    "maori": ("New Zealand", "Oceania", "Oceania", _countries("New Zealand")),
-    "māori": ("New Zealand", "Oceania", "Oceania", _countries("New Zealand")),
-    "hawaiian": ("Hawaiʻi", "Oceania", "Oceania", _circle(20.6, -157.5, 350)),
-    "marquesan": ("Marquesas Islands", "Oceania", "Oceania", _circle(-9.5, -139.5, 300)),
-    "rapa nui": ("Rapa Nui", "Oceania", "Oceania", _circle(-27.1, -109.4, 250)),
-    "fijian": ("Fiji", "Oceania", "Oceania", _countries("Fiji")),
-    "tongan": ("Tonga", "Oceania", "Oceania", _countries("Tonga")),
-    "samoan": ("Samoa", "Oceania", "Oceania", _countries("Samoa")),
-    "aboriginal": ("Australia", "Oceania", "Oceania", _countries("Australia")),
+    "asmat": ("Asmat, New Guinea", "Oceania", _circle(-5.5, 138.5, 350)),
+    "iatmul": ("Sepik River, New Guinea", "Oceania", _circle(-4.2, 143.3, 300)),
+    "abelam": ("Sepik River, New Guinea", "Oceania", _circle(-3.8, 143.0, 300)),
+    "maori": ("New Zealand", "Oceania", _countries("New Zealand")),
+    "māori": ("New Zealand", "Oceania", _countries("New Zealand")),
+    "hawaiian": ("Hawaiʻi", "Oceania", _circle(20.6, -157.5, 350)),
+    "marquesan": ("Marquesas Islands", "Oceania", _circle(-9.5, -139.5, 300)),
+    "rapa nui": ("Rapa Nui", "Oceania", _circle(-27.1, -109.4, 250)),
+    "fijian": ("Fiji", "Oceania", _countries("Fiji")),
+    "tongan": ("Tonga", "Oceania", _countries("Tonga")),
+    "samoan": ("Samoa", "Oceania", _countries("Samoa")),
+    "aboriginal": ("Australia", "Oceania", _countries("Australia")),
 }
+
+
+# Sub-national places named in the Met's fields, for refining a whole-country answer.
+# name -> (label, lat, lon, radius km). Written from the most common strings in the catalogue.
+_THEBES = ("Thebes, Egypt", 25.72, 32.61, 120)
+_MEMPHITE = ("Memphite region, Egypt", 29.7, 31.2, 120)
+_KHARGA = ("Kharga Oasis, Egypt", 25.45, 30.55, 150)
+FINE_PLACES: dict[str, tuple[str, float, float, int]] = {
+    # Egypt
+    "thebes": _THEBES, "deir el-bahri": _THEBES, "asasif": _THEBES, "southern asasif": _THEBES,
+    "malqata": _THEBES, "sheikh abd el-qurna": _THEBES, "valley of the kings": _THEBES,
+    "dra abu el-naga": _THEBES, "khokha": _THEBES, "el-khokha": _THEBES, "deir el-medina": _THEBES,
+    "wadi gabbanat el-qurud": _THEBES, "memphite region": _MEMPHITE, "lisht north": _MEMPHITE,
+    "lisht south": _MEMPHITE, "lisht": _MEMPHITE, "saqqara": _MEMPHITE, "giza": _MEMPHITE,
+    "memphis": _MEMPHITE, "dahshur": _MEMPHITE, "fayum entrance area": ("Fayum, Egypt", 29.3, 30.85, 100),
+    "fayum": ("Fayum, Egypt", 29.3, 30.85, 100), "lahun": ("Fayum, Egypt", 29.3, 30.85, 100),
+    "amarna": ("Amarna, Egypt", 27.65, 30.9, 100), "hermopolis": ("Hermopolis, Egypt", 27.78, 30.8, 100),
+    "abydos": ("Abydos, Egypt", 26.18, 31.92, 100), "meir": ("Meir, Egypt", 27.42, 30.75, 100),
+    "oxyrhynchus": ("Oxyrhynchus, Egypt", 28.53, 30.65, 100), "tell basta": ("Bubastis, Egypt", 30.57, 31.51, 100),
+    "deir el-ballas": ("Deir el-Ballas, Egypt", 26.05, 32.75, 100), "kharga oasis": _KHARGA, "hibis": _KHARGA,
+    "middle egypt": ("Middle Egypt", 27.8, 30.8, 250), "northern upper egypt": ("Upper Egypt", 26.5, 31.7, 200),
+    "southern upper egypt": ("Upper Egypt", 25.0, 32.8, 200), "upper egypt": ("Upper Egypt", 25.8, 32.5, 300),
+    "eastern delta": ("Nile Delta, Egypt", 30.8, 31.8, 120), "lower egypt": ("Nile Delta, Egypt", 30.8, 31.0, 180),
+    "lower nubia": ("Lower Nubia", 22.5, 32.0, 250),
+    # Near East and Iran
+    "qasr-i abu nasr": ("Shiraz region, Iran", 29.6, 52.6, 120), "hasanlu": ("Hasanlu, northwest Iran", 37.0, 45.46, 120),
+    "ctesiphon": ("Ctesiphon, Iraq", 33.09, 44.58, 120), "ziwiye": ("Ziwiye, northwest Iran", 36.2, 46.7, 120),
+    "nippur": ("Nippur, Iraq", 32.13, 45.23, 120), "luristan": ("Luristan, Iran", 33.5, 48.0, 200),
+    "western iran": ("Western Iran", 34.5, 47.0, 300), "northwestern iran": ("Northwestern Iran", 37.0, 46.5, 300),
+    "lachish": ("Lachish", 31.56, 34.85, 80),
+    # Central, South and East Asia
+    "xinjiang": ("Xinjiang, China", 41.0, 85.0, 900), "xinjiang autonomous region": ("Xinjiang, China", 41.0, 85.0, 900),
+    "tibetan": ("Tibetan Plateau", 31.0, 89.0, 800), "tibet": ("Tibetan Plateau", 31.0, 89.0, 800),
+    "gandhara": ("Gandhara", 34.0, 72.0, 250), "kashmir": ("Kashmir", 34.0, 75.0, 200),
+    "gujarat": ("Gujarat, India", 22.6, 71.5, 300), "rajasthan": ("Rajasthan, India", 26.5, 73.5, 350),
+    "tamil nadu": ("Tamil Nadu, India", 11.0, 78.5, 300), "kerala": ("Kerala, India", 10.2, 76.4, 200),
+    "deccan": ("Deccan, India", 17.0, 76.0, 500), "bengal": ("Bengal", 24.0, 89.0, 300),
+    "punjab": ("Punjab", 31.0, 74.5, 300), "odisha": ("Odisha, India", 20.5, 84.5, 250),
+    "orissa": ("Odisha, India", 20.5, 84.5, 250), "madhya pradesh": ("Madhya Pradesh, India", 23.5, 78.0, 400),
+    "uttar pradesh": ("Uttar Pradesh, India", 27.0, 80.5, 350), "himachal pradesh": ("Himachal Pradesh, India", 32.0, 77.0, 150),
+    "kathmandu valley": ("Kathmandu Valley, Nepal", 27.7, 85.3, 100),
+    # Southeast Asia
+    "java": ("Java, Indonesia", -7.4, 110.0, 400), "jawa": ("Java, Indonesia", -7.4, 110.0, 400),
+    "central java": ("Central Java, Indonesia", -7.4, 110.0, 150), "east java": ("East Java, Indonesia", -7.9, 112.5, 150),
+    "eastern java": ("East Java, Indonesia", -7.9, 112.5, 150), "west java": ("West Java, Indonesia", -6.9, 107.6, 150),
+    "bali": ("Bali, Indonesia", -8.4, 115.1, 100), "sumatra": ("Sumatra, Indonesia", -0.5, 101.5, 500),
+    # The Americas
+    "guerrero": ("Guerrero, Mexico", 17.6, -99.9, 180), "veracruz": ("Veracruz, Mexico", 19.2, -96.5, 250),
+    "colima": ("Colima, Mexico", 19.1, -103.9, 100), "michoacan": ("Michoacán, Mexico", 19.2, -101.8, 180),
+    "nayarit": ("Nayarit, Mexico", 21.8, -105.0, 130), "jalisco": ("Jalisco, Mexico", 20.6, -103.4, 200),
+    "oaxaca": ("Oaxaca, Mexico", 17.0, -96.7, 200), "north coast": ("North coast of Peru", -8.0, -79.0, 300),
+    "central coast": ("Central coast of Peru", -12.0, -77.0, 250), "south coast": ("South coast of Peru", -14.5, -75.5, 250),
+    "ica valley": ("Ica Valley, Peru", -14.1, -75.7, 120), "sierra nevada de santa marta": ("Santa Marta, Colombia", 10.9, -73.6, 80),
+    "new england": ("New England", 43.0, -71.5, 350), "massachusetts": ("Massachusetts", 42.3, -71.8, 130),
+    "pennsylvania": ("Pennsylvania", 40.9, -77.8, 220), "connecticut river valley": ("Connecticut River Valley", 42.5, -72.6, 180),
+    "long island": ("Long Island, New York", 40.8, -73.2, 90), "british columbia": ("British Columbia, Canada", 54.0, -125.0, 500),
+    # Europe
+    "attic": ("Attica, Greece", 37.98, 23.73, 100), "laconian": ("Laconia, Greece", 37.1, 22.4, 80),
+    "corinthian": ("Corinth, Greece", 37.9, 22.9, 80), "boeotian": ("Boeotia, Greece", 38.4, 23.2, 70),
+    "bohemia": ("Bohemia", 50.0, 14.5, 150), "burgundy": ("Burgundy, France", 47.0, 4.5, 150),
+    "normandy": ("Normandy, France", 49.0, 0.5, 130), "saxony": ("Saxony, Germany", 51.0, 13.2, 130),
+    "tuscany": ("Tuscany, Italy", 43.4, 11.0, 120), "carinthia": ("Carinthia, Austria", 46.7, 14.0, 90),
+    "meuse valley": ("Meuse Valley", 50.5, 5.3, 120), "staffordshire": ("Staffordshire, England", 52.9, -2.0, 60),
+    "south staffordshire": ("Staffordshire, England", 52.6, -2.1, 60), "west midlands": ("West Midlands, England", 52.5, -2.0, 50),
+    "west yorkshire": ("Yorkshire, England", 53.8, -1.6, 70), "south yorkshire": ("Yorkshire, England", 53.5, -1.3, 70),
+    # Africa
+    "court of benin": ("Kingdom of Benin, Nigeria", 6.3, 5.6, 200),
+}
+CITY_RADIUS_KM = 120
+MAX_OUTSIDE_COUNTRY_KM = 250   # historical regions spill over modern borders, but not far
+MAX_CITY_OUTSIDE_KM = 30       # cities are in the country or they aren't; this only covers coarse borders
 
 
 # ---------------------------------------------------------------- natural earth
@@ -363,9 +418,9 @@ def geometry(key: str) -> tuple:
 # ---------------------------------------------------------------- resolving
 
 _QUALIFIERS = re.compile(
-    r"^(?:possibly|probably|perhaps|likely|present-day|modern|the|ancient|attributed to)\s+", re.I)
+    r"^(?:possibly|probably|perhaps|likely|present-day|modern|the|ancient region of|ancient|attributed to|said to be from|from)\s+", re.I)
 _DIRECTION = re.compile(r"^(?:north|south|east|west|central|upper|lower)(?:ern)?\s+", re.I)
-_SPLIT = re.compile(r"\s*(?:\||;|/|\bor\b)\s*", re.I)
+_SPLIT = re.compile(r"\s*(?:\||/|\bor\b)\s*", re.I)
 
 
 def _clean(s: str) -> str:
@@ -378,7 +433,8 @@ def _clean(s: str) -> str:
 def _alternatives(raw: str) -> list[str]:
     """'Egypt or Syria' -> ['egypt', 'syria']; repeats collapse ('Iran|Iran')."""
     out: list[str] = []
-    for alt in _SPLIT.split(raw or ""):
+    # A semicolon narrows rather than offers a choice: "Peru; north coast".
+    for alt in _SPLIT.split((raw or "").replace(";", ",")):
         alt = _clean(alt)
         if alt and alt not in out:
             out.append(alt)
@@ -408,26 +464,28 @@ def _lower_ne() -> dict[str, str]:
     return {name.lower(): name for name in _ne()}
 
 
+def _bucket(name: str) -> str | None:
+    return BUCKET_OVERRIDES.get(name) or SUBREGIONS.get(_ne()[name]["properties"]["SUBREGION"])
+
+
 def _country_place(names: list[str], tier: str) -> Place | None:
-    hints = {HINT_OVERRIDES.get(n) or SUBREGIONS.get(_ne()[n]["properties"]["SUBREGION"]) for n in names}
-    hints.discard(None)
-    if not hints or len({h[1] for h in hints}) > 1:
+    buckets = {_bucket(n) for n in names}
+    if None in buckets or len(buckets) > 1:
         return None
-    hint, bucket = sorted(hints)[0]
     lat, lon = _country_polygons(names[0])[1]
     label = " or ".join(n.replace("United States of America", "United States") for n in names)
-    return Place("+".join(f"c:{n}" for n in names), label, hint, bucket, round(lat, 3), round(lon, 3), tier)
+    return Place("+".join(f"c:{n}" for n in names), label, buckets.pop(), round(lat, 3), round(lon, 3), tier)
 
 
 def _culture_place(entry: tuple) -> Place:
-    label, hint, bucket, geom = entry
+    label, bucket, geom = entry
     if geom[0] == "c":
         lat, lon = _country_polygons(geom[1][0])[1]
         key = "+".join(f"c:{n}" for n in geom[1])
     else:
         _, lat, lon, km = geom
         key = f"o:{lat},{lon},{km}"
-    return Place(key, label, hint, bucket, round(lat, 3), round(lon, 3), "A")
+    return Place(key, label, bucket, round(lat, 3), round(lon, 3), "A")
 
 
 def _merge(places: list[Place]) -> Place | None:
@@ -439,7 +497,7 @@ def _merge(places: list[Place]) -> Place | None:
     first = places[0]
     return Place("+".join(dict.fromkeys(p.key for p in places)),
                  " or ".join(dict.fromkeys(p.label for p in places)),
-                 first.hint, first.bucket, first.lat, first.lon, first.tier)
+                 first.bucket, first.lat, first.lon, first.tier)
 
 
 def _resolve_each(raw: str, lookup) -> Place | None:
@@ -455,8 +513,9 @@ def _resolve_each(raw: str, lookup) -> Place | None:
 
 def _strong(alt: str) -> Place | None:
     for v in _variants(alt):
-        if v in STRONG_CULTURES:
-            return _culture_place(STRONG_CULTURES[v])
+        for candidate in (v, _DIRECTION.sub("", v)):   # "Central Tibet" is still Tibet
+            if candidate in STRONG_CULTURES:
+                return _culture_place(STRONG_CULTURES[candidate])
     return None
 
 
@@ -472,12 +531,70 @@ def _weak(alt: str) -> Place | None:
     return _country_place(n, "C") if (n := _country_names(alt)) else None
 
 
-def resolve_object(culture: str = "", country: str = "", region: str = "") -> Place | None:
+@lru_cache(maxsize=1)
+def _cities() -> dict[str, list]:
+    return json.loads(CITIES_PATH.read_text(encoding="utf-8")) if CITIES_PATH.exists() else {}
+
+
+def _fine_parts(alt: str) -> list[str]:
+    """Most specific first: 'Italian, Venice (Murano)' -> murano, venice, italian."""
+    inner = [p.strip() for m in re.findall(r"\((.*?)\)", alt) for p in m.split(",")]
+    outer = [p.strip() for p in re.sub(r"\s*\(.*?\)", "", alt).split(",")]
+    return [_clean(p) for p in inner + outer[::-1] if _clean(p)]
+
+
+def _is_broad_name(part: str) -> bool:
+    return part in COUNTRY_ALIASES or part in _lower_ne() or part in WEAK_CULTURES or part in STRONG_CULTURES
+
+
+def _fine_place(part: str, base: Place) -> tuple[str, float, float, int] | None:
+    """A named place inside `base`, as (label, lat, lon, radius)."""
+    def within(lat: float, lon: float, km: float) -> bool:
+        return distance_to_region_km(lat, lon, base.key) <= km
+
+    if part in FINE_PLACES:
+        hit = FINE_PLACES[part]
+        return hit if within(hit[1], hit[2], MAX_OUTSIDE_COUNTRY_KM) else None
+    if _is_broad_name(part):
+        return None
+    for _, lat, lon in _cities().get(part, []):
+        if within(lat, lon, MAX_CITY_OUTSIDE_KM):
+            # The Met's spelling reads better than the gazetteer's (Nishapur, not Neyshabur).
+            name = part.title()
+            return (name if " or " in base.label else f"{name}, {base.label}"), lat, lon, CITY_RADIUS_KM
+    return None
+
+
+def _refine(place: Place, fields: tuple[str, ...]) -> Place:
+    """Narrow a whole-country answer using the first field that names a place within it."""
+    if not place.key.startswith("c:"):
+        return place
+    for value in fields:
+        hits = []
+        for alt in _alternatives(value):
+            hit = next((h for p in _fine_parts(alt) if (h := _fine_place(p, place))), None)
+            if hit is None:
+                hits = []    # "Hermopolis or somewhere unknown" doesn't narrow anything
+                break
+            if hit not in hits:
+                hits.append(hit)
+        if hits:
+            key = "+".join(f"o:{h[1]},{h[2]},{h[3]}" for h in hits)
+            label = " or ".join(dict.fromkeys(h[0] for h in hits))
+            return Place(key, label, place.bucket, hits[0][1], hits[0][2], "A")
+    return place
+
+
+def resolve_object(culture: str = "", country: str = "", region: str = "", subregion: str = "",
+                   city: str = "", county: str = "", state: str = "") -> Place | None:
     """Best region for a Met object, or None to exclude it from the pool."""
-    return (_resolve_each(culture, _strong)
-            or _resolve_each(country, _country)
-            or _resolve_each(region, _country)
-            or _resolve_each(culture, _weak))
+    place = (_resolve_each(culture, _strong)
+             or _resolve_each(country, _country)
+             or _resolve_each(region, _country)
+             or _resolve_each(culture, _weak))
+    if place is None:
+        return None
+    return _refine(place, (subregion, city, culture, county, state, region, country))
 
 
 # ---------------------------------------------------------------- distances
