@@ -1,0 +1,55 @@
+# --- Large binary data (never commit) ---
+data/
+artifacts/
+runs/checkpoints/
+runs/**/*.pt
+runs/**/*.pth
+runs/**/*.safetensors
+runs/**/*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+*.bin
+
+# --- Datasets / derived tables ---
+*.parquet
+*.csv
+*.tsv
+*.h5
+*.npz
+*.npy
+*.jsonl
+
+# --- Images ---
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.webp
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+env/
+*.egg
+
+# --- Notebooks / tooling ---
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini

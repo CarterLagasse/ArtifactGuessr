@@ -1,6 +1,6 @@
-# Anthropeum — Formalized Plan: Image → (Where, When)
+# Provenance — Formalized Plan: Image → (Where, When)
 
-Adapts and concretizes `anthropeum_model_plan.md` with verified data facts and the actual
+Adapts and concretizes `model_plan.md` with verified data facts and the actual
 computing environment. Plan freeze date: 2026-10-29.
 
 **Task.** Image-only prediction of an object's geographic origin (point + uncertainty)
@@ -64,9 +64,9 @@ game-style scoring (great-circle distance km, |year error|) is one reported metr
 ## 2. Directory layout
 
 ```
-anthropeum_cnn/
+project root/
 ├── PLAN.md                     ← this file
-├── anthropeum_model_plan.md    ← strategy reference (read-only)
+├── model_plan.md               ← strategy reference (read-only)
 ├── configs/
 │   └── base.yaml               ← cell sizes, date bins, sampling α, split seeds
 ├── data/
@@ -149,8 +149,8 @@ Splits are by **object**, never by image; stratified jointly by geocell × era-d
 - Date: median & mean |years|; %≤25 / 100 / 500 y.
 - Per-slice mandatory tables: geocell (or continent/region), era (decile of |year|), tier, classification,
   seen/unseen culture.
-- `game_score.py`: reimplement Anthropeum-style scoring from (km, |Δyears|); calibrate by comparing
-  to human scores on a few real games rather than claiming exactness.
+- `game_score.py`: reuse `game/scoring.py`, which matches the live game's formulas. The inputs still need
+  region polygons and `[begin, end]` ranges, not point labels, or the numbers won't be comparable.
 - Zero-shot frontier VLM baseline on 2,000-image stratified subsample (`stage5.py` — run it early:
   it calibrates what "hard" means and will inform whether Stage 4 (VLM fine-tune) is worth it).
 
@@ -230,7 +230,7 @@ Critical path is 1 → 3; download of images can overlap with geocoding/QA work 
 3. **Data skew** (Egypt/Attic/Japan dominate; sub-Saharan Africa, Oceania, SE Asia are few) → balanced sampling with capped oversampling + mandatory per-region tables, never collapse to a health number.
 4. **Date-label noise** (sentinels, ▶500 y spans, 142 bad rows) → cleaned with per-row tier; soft targets so the model doesn't pretend precision the labels lack.
 5. **Photographic shortcuts** (Met background, scale bars, lighting era) → background-mask ablation at M7; treat metric drop as a red flag, not a bug.
-6. **Game score is an approximation** → built from (km, |Δyears|); explicitly calibrated against hand-played examples once, never claimed exact.
+6. **Game score depends on regions** → the formulas are known (`game/scoring.py`), but the real game's region polygons aren't ours, so local scores remain close rather than identical.
 7. **Disk / GPU limits** → never fetch `primaryImage` (originals); B-scale backbones only; bf16 + grad checkpointing; Stage 4 excluded by default because 6 GB makes serious VLM fine-tuning infeasible.
 
 ---

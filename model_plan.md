@@ -7,7 +7,7 @@ Build a model that takes an image of a museum object and predicts:
 - **Where**: a location (lat/lon, or a distribution over locations)
 - **When**: a year (or a distribution over years)
 
-The task mirrors the daily game Anthropeum, which uses Met Museum objects and scores guesses by map distance and year error.
+The task mirrors a daily museum-object guessing game, which uses Met Museum objects and scores guesses by map distance and year error.
 
 **Decide first (everything downstream depends on it):**
 

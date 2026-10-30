@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provenance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- Home -->
+<section id="home" class="screen">
+  <button class="theme-toggle" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">◐</button>
+  <h1 class="hero-title">Provenance</h1>
+  <p class="hero-sub">One object. One pin on the map. One guess at its age.</p>
+  <p class="hero-copy" id="home-copy"></p>
+  <div class="eyebrow" id="home-date"></div>
+  <button id="btn-play" class="btn-primary"></button>
+  <button id="btn-practice" class="btn-quiet">Practice with ten random objects</button>
+  <p class="fine">A local practice game. Objects: The Metropolitan Museum of Art Open Access, CC0.</p>
+</section>
+
+<!-- Game -->
+<section id="game" class="screen" hidden>
+  <header class="topbar">
+    <button id="btn-home" class="wordmark" title="Home">Provenance</button>
+    <div class="topstats">
+      <div><span class="eyebrow">Round</span> <span id="stat-round" class="stat"></span></div>
+      <div><span class="eyebrow">Score</span> <span id="stat-score" class="stat"></span></div>
+      <button class="theme-toggle inline" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </div>
+  </header>
+
+  <div class="timeline-row">
+    <div class="timeline-title">When</div>
+    <div class="timeline-readout" id="tl-readout"></div>
+    <div class="timeline-box"><svg id="timeline" height="68"></svg></div>
+  </div>
+
+  <div class="board">
+    <div class="map-box">
+      <canvas id="map"></canvas>
+      <div class="map-controls">
+        <button id="zoom-in" aria-label="Zoom in">+</button>
+        <button id="zoom-out" aria-label="Zoom out">−</button>
+        <button id="zoom-reset" aria-label="Reset map" title="Reset map">⟲</button>
+      </div>
+    </div>
+
+    <aside class="artifact">
+      <div class="photo-box">
+        <img id="photo" alt="Museum object to identify" title="Click to enlarge">
+        <button id="ph-prev" class="photo-nav left" aria-label="Previous photo">‹</button>
+        <button id="ph-next" class="photo-nav right" aria-label="Next photo">›</button>
+        <div id="ph-count" class="photo-count"></div>
+      </div>
+      <div class="medium" id="medium"></div>
+      <div class="credit" id="credit"></div>
+      <div class="hints" id="hints">
+        <div class="hints-head">
+          <div><div class="eyebrow">Hints</div><div class="hints-left" id="hints-left"></div></div>
+          <button id="btn-hint" class="btn-outline">Use a hint</button>
+        </div>
+        <dl id="hints-shown"></dl>
+      </div>
+      <div class="reveal" id="reveal" hidden></div>
+    </aside>
+  </div>
+
+  <footer class="actionbar">
+    <button id="btn-action" class="btn-primary" disabled></button>
+  </footer>
+</section>
+
+<!-- Results -->
+<section id="results" class="screen" hidden>
+  <header class="topbar">
+    <button id="btn-home2" class="wordmark" title="Home">Provenance</button>
+    <button class="theme-toggle inline" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </header>
+  <div class="results-body">
+    <div class="eyebrow" id="res-date"></div>
+    <div class="res-total" id="res-total"></div>
+    <div class="res-of">of 100,000</div>
+    <div class="squares" id="res-squares"></div>
+    <div class="res-actions">
+      <button id="btn-share" class="btn-primary">Share</button>
+      <button id="btn-again" class="btn-outline">Practice more</button>
+    </div>
+    <div id="res-history"></div>
+    <div class="table-scroll"><table id="res-table"></table></div>
+  </div>
+</section>
+
+<!-- Hint picker -->
+<div id="hint-modal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-labelledby="hint-title">
+    <button id="hint-close" class="modal-x" aria-label="Close">×</button>
+    <div id="hint-title" class="modal-title">Hints</div>
+    <p id="hint-copy"></p>
+    <div id="hint-options"></div>
+  </div>
+</div>
+
+<div id="lightbox" hidden>
+  <img id="lightbox-img" alt="" draggable="false">
+  <button id="lb-prev" class="photo-nav left" aria-label="Previous photo">‹</button>
+  <button id="lb-next" class="photo-nav right" aria-label="Next photo">›</button>
+  <button id="lb-close" class="lb-close" aria-label="Close">×</button>
+  <div class="lb-hint">Scroll to zoom · drag to move · click or Esc to close</div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# TODO — Anthropeum
+# TODO — Provenance
 
 Companion to `PLAN.md` (decisions/context live there). Work top-to-bottom; check items off.
 Counts to sanity-check as you go are from the 2026-10-29 data audit.
@@ -37,7 +37,7 @@ Counts to sanity-check as you go are from the 2026-10-29 data audit.
 
 - [ ] **1.1** `src/aep/common/io.py` — CSV→parquet loader; strip the BOM; cast `Object Begin/End Date` to int, `Is Public Domain` to bool
 - [ ] **1.2** `src/aep/clean/date_clean.py` — drop sentinels (-700000, 9999); fix the 142 `begin>end` rows; record per-row date-width
-- [ ] **1.3** `src/aep/eval/game_score.py` — scoring stub from (km, |Δyears|); fill the constant later, structure now
+- [ ] **1.3** `src/aep/eval/game_score.py` — reuse `game/scoring.py`: distance to a region, year gap from a 250-year block to `[begin, end]`
 - [ ] **1.4** Baseline notebook/script `runs/00_baselines.ipynb` reporting (on the PD+geo+dates slice, ~180k):
   - [ ] global median lat/lon + median year
   - [ ] department-conditional medians (labeled clearly as an upper-bound-with-leak comparison)
@@ -122,7 +122,7 @@ Counts to sanity-check as you go are from the 2026-10-29 data audit.
 
 ## Phase 9 — Polish & extras (open-ended)
 
-- [ ] `game_score.py` calibration: play Anthropeum, log ~100 of your own games, refine the formula
+- [ ] `game_score.py`: formulas are settled (`game/scoring.py`); play the original game and log ~100 objects to compare our regions with theirs
 - [ ] `test_game_like` set (from Phase-9 logs), final eval with it
 - [ ] Ensemble: kNN over train embeddings + Stage-2 head predictions (weighted by val reliability)
 - [ ] Calibration check: does "70% confident" mean 70% right?
