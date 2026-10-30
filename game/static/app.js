@@ -51,6 +51,7 @@ function saveGame() {
 }
 
 async function api(path, body) {
+  if (window.StaticBackend) return window.StaticBackend.api(path, body);
   const r = await fetch(path, body ? {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   } : undefined);
@@ -266,7 +267,7 @@ function showLightboxPhoto() {
   // Show the normal photo at once, then swap in the full-resolution one for zooming.
   const token = ++lb.loading, full = new Image();
   full.onload = () => { if (token === lb.loading) img.src = full.src; };
-  full.src = `${src}?full=true`;
+  full.src = window.StaticBackend ? window.StaticBackend.fullPhoto(src) : `${src}?full=true`;
 }
 function openLightbox() {
   $("lightbox").hidden = false;
@@ -797,7 +798,7 @@ window.addEventListener("keydown", (e) => {
 (async () => {
   document.documentElement.dataset.theme = store.get("artifactguessr:theme", "dark");
   renderHome();
-  const world = await (await fetch("/static/countries.json")).json();
+  const world = await (await fetch(window.StaticBackend?.countriesUrl ?? "/static/countries.json")).json();
   const polys = [];
   labels = [];
   for (const f of world.features) {

@@ -17,6 +17,17 @@ Then open http://localhost:8321. Run the tests with `python -m pytest tests`.
 The game needs `data/game_pool.parquet`. To build it, put the Met's `MetObjects.csv` in `data/`
 and run `python -m game.pool`.
 
+## Hosting on GitHub Pages
+
+GitHub Pages only serves static files, so `python -m game.build_site` builds a server-free copy
+into `docs/`, which Pages serves from the `main` branch. Rebuild and commit `docs/` whenever
+`game/static/` or the pool changes. To try the build locally, run `python -m http.server 8000`
+from the project root and open http://localhost:8000/docs/.
+
+On the static site, scoring runs in the browser and answers are readable in the page's data.
+That's fine for a casual game, but use the local server for anything that needs rounds kept
+hidden, such as an agent.
+
 ## How it plays
 
 Each game is ten objects, each worth up to 10,000 points. **Play** gives ten random objects, as
@@ -73,14 +84,18 @@ game/
 ├── geolite.py        Met text fields → answer region; distance to a region
 ├── cities.json       GeoNames cities named in the Met's data
 ├── build_cities.py   rebuilds cities.json
+├── build_site.py     builds the static site into docs/
 ├── pool.py           CSV filter, balanced sample, API fetch → data/game_pool.parquet
 ├── server.py         FastAPI: daily picks, scoring, image proxy, static files
 └── static/           vanilla JS, canvas map, SVG timeline, no build step
-tests/test_game.py
+tests/                rules, geography, and browser-versus-server scoring (needs Node)
+docs/                 generated static site, served by GitHub Pages
 data/                 Met CSV, cached API responses, pool, photo cache (not in git)
 ```
 
 ## API
+
+The local server only; the static site answers the same calls from `static_backend.js`.
 
 | Endpoint | Meaning |
 |---|---|

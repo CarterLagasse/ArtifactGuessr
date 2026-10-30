@@ -7,7 +7,7 @@ Dated facts are as of the date stated beside them.
 
 Last updated 2026-10-30.
 
-**Game: playable.** Unlimited and daily modes, Met pool, polygon and sub-national regions, tests.
+**Game: playable.** Unlimited and daily modes, Met pool, polygon and sub-national regions, tests, static build for GitHub Pages in `docs/`.
 
 **Model: not started.** Nothing in Part 2 or Part 3 has been built yet, and their boxes are unchecked.
 

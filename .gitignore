@@ -1,4 +1,4 @@
-# --- Large binary data (never commit) ---
+# --- Data ---
 data/
 artifacts/
 runs/checkpoints/
