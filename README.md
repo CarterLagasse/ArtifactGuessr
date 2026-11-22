@@ -5,6 +5,10 @@ You see a photo of an object and its medium, drop a pin where you think it was m
 250-year block for when. It also serves as the test bed for an image-to-place-and-date model;
 see `PLAN.md`.
 
+## Coming soon
+
+ArtifactGuessr Versus! Play against your friend and compete in a GeoGuessr battle-style matchup.
+
 ## Run it
 
 ```
